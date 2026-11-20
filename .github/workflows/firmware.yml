@@ -1,0 +1,30 @@
+name: 固件构建
+on:
+  push:
+    paths:
+      - "main/**"
+      - "CMakeLists.txt"
+      - "sdkconfig.defaults"
+      - ".github/workflows/firmware.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ESP-IDF 编译（esp32c6）
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32c6
+          path: .
+      - name: 上传固件
+        uses: actions/upload-artifact@v4
+        with:
+          name: servobridge-firmware
+          path: |
+            build/ServoBridge.bin
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+          if-no-files-found: error
