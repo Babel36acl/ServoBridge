@@ -86,7 +86,7 @@ static volatile uint16_t cur_mtu = 23;
 static uint8_t own_addr_type;
 
 /* 6 字节配置：[0]校验 [1]停止位 [2..5]波特率小端。出厂默认 19200 8E1。 */
-static uint8_t uart_cfg[6] = {1, 1, 0x80, 0x4b, 0x00, 0x00};
+static uint8_t uart_cfg[6] = {1, 1, 0x00, 0x4b, 0x00, 0x00};
 
 static QueueHandle_t uart_evt_queue;
 
@@ -129,7 +129,7 @@ static void load_cfg(void)
     size_t len = sizeof(uart_cfg);
     if (nvs_get_blob(h, NVS_KEY_CFG, uart_cfg, &len) != ESP_OK ||
         len != sizeof(uart_cfg)) {
-        uint8_t def[6] = {1, 1, 0x80, 0x4b, 0x00, 0x00};
+        uint8_t def[6] = {1, 1, 0x00, 0x4b, 0x00, 0x00};
         memcpy(uart_cfg, def, sizeof(def));
     }
     nvs_close(h);
@@ -199,6 +199,16 @@ static void uart_task(void *arg)
 
 /* ---------- GATT ---------- */
 
+/* 在 IDF 6.x 的 NimBLE 里，任何特性（含只 notify 的）都必须带 access_cb，
+ * 否则 ble_gatts_count_cfg 返回 BLE_HS_EINVAL、启动即 abort。本回调不会被调用：
+ * TX 特性只声明 NOTIFY，没有 READ/WRITE 属性。 */
+static int nus_tx_access(uint16_t conn, uint16_t handle,
+                         struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    (void)conn; (void)handle; (void)ctxt; (void)arg;
+    return BLE_ATT_ERR_READ_NOT_PERMITTED;
+}
+
 static int nus_rx_access(uint16_t conn, uint16_t handle,
                          struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
@@ -257,7 +267,7 @@ static const struct ble_gatt_chr_def nus_chrs[] = {
     },
     {
         .uuid = &NUS_TX_UUID.u,
-        .access_cb = NULL, /* 只 notify，不提供读 */
+        .access_cb = nus_tx_access, /* 只 notify；6.x 要求非空回调，实际不会被调用 */
         .flags = BLE_GATT_CHR_F_NOTIFY,
         .val_handle = &nus_tx_handle,
     },

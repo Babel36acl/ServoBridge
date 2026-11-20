@@ -45,11 +45,26 @@ CTRL 特性是 6 字节：`[0]` 校验位（0 无 / 1 偶 / 2 奇），`[1]` 停
 
 ## 烧录
 
+- 基准版本：**ESP-IDF v6.1.1**（CI 与本机一致；v6.x 起 NimBLE 要求所有特性都带 `access_cb`，只 notify 的 NUS TX 也配了不会被调用的桩）。
+
 ```sh
 idf.py set-target esp32c6
 idf.py build
-idf.py -p /dev/ttyACM0 flash monitor   # USB Serial/JTAG，无需进 boot 模式
+idf.py -p COM3 flash monitor   # USB Serial/JTAG，无需进 boot 模式
 ```
+
+Windows 本机（EIM v3 布局）`export.bat` 不能直接用，需要手工拼环境：`IDF_PATH=C:\Users\A1165\.esp\.espressif\v6.1.1\esp-idf`、`IDF_TOOLS_PATH=C:\Espressif`（不是 `C:\Espressif\tools`）、`IDF_PYTHON_ENV_PATH=C:\Espressif\tools\python\v6.1.1\venv`、`ESP_IDF_VERSION=6.1.1`（缺它 idf_component_manager 直接 TypeError），PATH 追加 venv Scripts、`idf-exe\1.0.3`、`cmake\4.0.3\bin`、`ninja\1.12.1`、`riscv32-esp-elf\esp-15.2.0_20251204\riscv32-esp-elf\bin`；`C:\Espressif\espidf.constraints.v6.1.txt` 缺失会让 idf.py rc=1，从 `tools\` 复制一份到 `C:\Espressif\` 即消。`main` 组件保持不写显式 REQUIRES（一写就失去自动依赖全部组件，`nvs.h` 会断）。
+
+## 实测记录（2026-11-20 · Windows + ESP-IDF v6.1.1）
+
+- 硬件：Waveshare ESP32-C6-Touch-LCD-1.47，烧录/控制台走板上 Type-C（COM3）。
+- 修复两处实机暴露的问题：
+  1. IDF 6.x NimBLE 对 `access_cb == NULL` 的特性在 `ble_gatts_count_cfg` 阶段直接 `BLE_HS_EINVAL` → 启动即 abort（NUS TX 补回调桩）；
+  2. 出厂默认波特率字节写成 `80 4B`（=19328），与文档宣称的 19200 不符，已改回 `00 4B`。
+- BLE 实测（PC 侧 bleak 直连）：扫描到 `ServoBridge` → 连接 MTU=256 → CTRL 读回 `01 01 00 4B 00 00`（19200 8E1）→ 在线写 9600 8N1 生效并回读一致 → 恢复 19200 → NUS RX 整帧写入、链路无崩溃。
+- 固件侧串口日志逐条对应：`BLE 已连接`、`MTU 协商为 256`、`UART0 9600/19200 baud`、`BLE 已断开，恢复广播`。
+- 未覆盖：RS485 物理链路（NUS→UART0→485 模块→伺服）尚无对端设备回包验证，接上 485 模块后用应用侧真连一次即可闭环。
+
 
 ## 换件说明
 
