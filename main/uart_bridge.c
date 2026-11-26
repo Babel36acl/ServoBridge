@@ -58,6 +58,11 @@ void uart_bridge_apply_cfg(void)
              (unsigned)bridge_cfg_baud(), raw[0], raw[1]);
 }
 
+int uart_bridge_write(const uint8_t *data, size_t len)
+{
+    return uart_write_bytes(UART_PORT, data, len);
+}
+
 static void uart_task(void *arg)
 {
     (void)arg;

@@ -66,7 +66,7 @@ static int nus_rx_access(uint16_t conn, uint16_t handle,
     if (os_mbuf_copydata(ctxt->om, 0, len, buf) != 0)
         return BLE_ATT_ERR_INSUFFICIENT_RES;
     /* 整帧一次写下：驱动 TX ring buffer 保证帧内零间隙 */
-    if (uart_write_bytes(UART_NUM_0, buf, (size_t)len) != len)
+    if (uart_bridge_write(buf, (size_t)len) != len)
         return BLE_ATT_ERR_INSUFFICIENT_RES;
     return 0;
 }
