@@ -46,6 +46,19 @@ CTRL 特性是 6 字节：`[0]` 校验位（0 无 / 1 偶 / 2 奇），`[1]` 停
 - 上行以 `uart_set_rx_timeout(4)` 的空闲事件切帧，整帧一次 notify；超过 ATT MTU-3 时连续分段，中央端按字节流重组。
 - 配置走 CTRL 带外通道，不污染 Modbus 字节流。
 
+## 代码结构（`main/`）
+
+| 文件 | 职责 |
+| --- | --- |
+| `main.c` | 只有 `app_main`，按启动顺序串联各模块 |
+| `bridge_cfg.c/.h` | 6 字节 CTRL 配置、合法性校验、NVS 持久化（namespace `bridge`，key `cfg`） |
+| `uart_bridge.c/.h` | UART0 初始化、在线改参数、`uart_task` 空闲切帧上行 |
+| `ble_gatt.c/.h` | NUS/CTRL 服务与各 access_cb、notify 分段（含只读版本特性） |
+| `ble_gap.c/.h` | 广播、连接/MTU 状态、NimBLE host task |
+| `fw_version.c/.h` | `PROJECT_VER` 版本字符串（启动日志与版本特性共用） |
+
+跨模块状态只走 getter：连接状态归 `ble_gap`，串口配置归 `bridge_cfg`。
+
 ## 烧录
 
 - 基准版本：**ESP-IDF v6.1.1**（CI 与本机一致；v6.x 起 NimBLE 要求所有特性都带 `access_cb`，只 notify 的 NUS TX 也配了不会被调用的桩）。
@@ -71,5 +84,5 @@ Windows 本机（EIM v3 布局）`export.bat` 不能直接用，需要手工拼�
 
 ## 换件说明
 
-- **换手动方向 485 模块（DE/RE 引出）**：GPIO7 接 DE/RE，在 `init_uart()` 加 `uart_set_pin(UART_PORT, -1, -1, 7, -1)` 并 `uart_set_mode(UART_PORT, UART_MODE_RS485_HALF_DUPLEX)`，驱动自动切向并滤掉自己发的回环字节，其余不动（main.c 头注释里也有这段）。
-- **换芯片**：全部行为都在 `main/main.c` 一个文件里（约 400 行）：NimBLE NUS 外设 + UART0 事件循环 + 6 字节配置。换平台时按这三个块平移即可，协议本身（UUID、6 字节配置）保持不变，应用侧零改动。
+- **换手动方向 485 模块（DE/RE 引出）**：GPIO7 接 DE/RE，在 `uart_bridge.c` 的 `uart_bridge_init()` 里加 `uart_set_pin(UART_PORT, -1, -1, 7, -1)` 并 `uart_set_mode(UART_PORT, UART_MODE_RS485_HALF_DUPLEX)`，驱动自动切向并滤掉自己发的回环字节，其余不动（main.c 头注释里也有这段）。
+- **换芯片**：行为分布在 `main/` 的四个模块——`ble_gatt`（NimBLE 服务）、`ble_gap`（广播/连接）、`uart_bridge`（UART0 与切帧）、`bridge_cfg`（配置与 NVS），`main.c` 只是启动串联。换平台时按这四个块平移即可，协议本身（UUID、6 字节配置）保持不变，应用侧零改动。
