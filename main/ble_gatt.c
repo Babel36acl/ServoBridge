@@ -146,21 +146,31 @@ void ble_gatt_init(void)
     ble_svc_gap_device_name_set(BLE_NAME);
 }
 
-void ble_gatt_notify_frame(uint16_t conn, const uint8_t *data, size_t len)
+int ble_gatt_notify_frame(uint16_t conn, uint32_t epoch, const uint8_t *data, size_t len)
 {
-    int mtu_payload = (int)ble_gap_mtu() - 3;
-    if (mtu_payload < 20)
-        mtu_payload = 20; /* MTU 未协商时按默认 23 */
     int total = (int)len;
-    for (int off = 0; off < total; off += mtu_payload) {
-        int chunk = (total - off < mtu_payload) ? (total - off) : mtu_payload;
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(data + off, (uint16_t)chunk);
+    int sent = 0;
+    while (sent < total) {
+        /* 断连/重连后句柄可能被协议栈复用，不能再往「同一个句柄号」塞上一帧的剩余字节 */
+        if (ble_gap_conn_handle() != conn || ble_gap_conn_epoch() != epoch)
+            break;
+        /* 每段重新取 MTU：协商可能在整帧发送途中完成（23 → 256），
+         * 按旧 MTU 切出来的分段会超长被丢弃 */
+        int payload = (int)ble_gap_mtu() - 3;
+        if (payload < 20)
+            payload = 20; /* MTU 未协商时按默认 23 */
+        int chunk = (total - sent < payload) ? (total - sent) : payload;
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(data + sent, (uint16_t)chunk);
         if (om == NULL)
-            continue;
+            break;
         /* ble_gatts_notify_custom 无论成败都接管并释放 mbuf（NimBLE 头文件原话：
          * "consumes the supplied mbuf regardless of the outcome"），这里不能再 free */
         int rc = ble_gatts_notify_custom(conn, s_nus_tx_handle, om);
-        if (rc != 0)
+        if (rc != 0) {
             ESP_LOGD(TAG, "notify 失败 rc=%d（连接已失效？）", rc);
+            break; /* 连接已断，继续发只会白丢剩余分段 */
+        }
+        sent += chunk;
     }
+    return sent;
 }

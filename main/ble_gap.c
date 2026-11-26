@@ -16,6 +16,7 @@ static const char *TAG = "ble_gap";
 
 static volatile uint16_t s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 static volatile uint16_t s_cur_mtu = 23;
+static volatile uint32_t s_conn_epoch;
 static uint8_t s_own_addr_type;
 
 static void start_advertising(void);
@@ -31,6 +32,11 @@ uint16_t ble_gap_conn_handle(void)
 uint16_t ble_gap_mtu(void)
 {
     return s_cur_mtu;
+}
+
+uint32_t ble_gap_conn_epoch(void)
+{
+    return s_conn_epoch;
 }
 
 static void start_advertising(void)
@@ -75,11 +81,13 @@ static int gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_CONNECT:
         s_conn_handle = event->connect.conn_handle;
         s_cur_mtu = 23;
+        s_conn_epoch++;
         ESP_LOGI(TAG, "BLE 已连接 conn=%u", event->connect.conn_handle);
         return 0;
     case BLE_GAP_EVENT_DISCONNECT:
         s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
         s_cur_mtu = 23;
+        s_conn_epoch++;
         ESP_LOGI(TAG, "BLE 已断开，恢复广播");
         start_advertising();
         return 0;

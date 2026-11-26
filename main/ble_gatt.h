@@ -24,8 +24,10 @@ const ble_uuid128_t *ble_gatt_nus_svc_uuid(void);
 /* 注册 GAP/GATT 基础服务 + NUS/CTRL 服务并设置设备名；须在 nimble_port_init() 之后调用 */
 void ble_gatt_init(void);
 
-/* 把一段上行字节按当前 MTU-3 分段 notify 给 conn（整帧一次调用的语义由调用方保证） */
-void ble_gatt_notify_frame(uint16_t conn, const uint8_t *data, size_t len);
+/* 把一段上行字节按当前 MTU-3 分段 notify 给 conn。
+ * 每段前核对 conn 与连接代数：断连或重连（句柄可能被复用）时丢弃剩余分段。
+ * 返回实际交给协议栈的字节数。 */
+int ble_gatt_notify_frame(uint16_t conn, uint32_t epoch, const uint8_t *data, size_t len);
 
 #ifdef __cplusplus
 }
