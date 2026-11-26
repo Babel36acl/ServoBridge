@@ -2,8 +2,11 @@ name: 固件构建
 
 on:
   push:
+    # 只写 tags 不写 branches 时，分支推送根本不触发，所以两者都要列。
     # GitHub 文档：Path filters are not evaluated for pushes of tags。
     # 因此 v* 标签推送必定触发本 workflow（只走 release job），分支推送仍按 paths 过滤。
+    branches:
+      - "**"
     tags:
       - "v*"
     paths:
