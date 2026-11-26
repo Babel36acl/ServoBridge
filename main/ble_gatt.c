@@ -157,8 +157,10 @@ void ble_gatt_notify_frame(uint16_t conn, const uint8_t *data, size_t len)
         struct os_mbuf *om = ble_hs_mbuf_from_flat(data + off, (uint16_t)chunk);
         if (om == NULL)
             continue;
-        /* 成功发送即由协议栈消费；失败时须自行释放，防止 mbuf 泄漏 */
-        if (ble_gatts_notify_custom(conn, s_nus_tx_handle, om) != 0)
-            os_mbuf_free_chain(om);
+        /* ble_gatts_notify_custom 无论成败都接管并释放 mbuf（NimBLE 头文件原话：
+         * "consumes the supplied mbuf regardless of the outcome"），这里不能再 free */
+        int rc = ble_gatts_notify_custom(conn, s_nus_tx_handle, om);
+        if (rc != 0)
+            ESP_LOGD(TAG, "notify 失败 rc=%d（连接已失效？）", rc);
     }
 }
