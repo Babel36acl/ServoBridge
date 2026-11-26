@@ -67,6 +67,15 @@ static void uart_task(void *arg)
     for (;;) {
         if (xQueueReceive(s_uart_evt_queue, &evt, portMAX_DELAY) != pdTRUE)
             continue;
+        if (evt.type == UART_FIFO_OVF || evt.type == UART_BUFFER_FULL) {
+            /* 溢出后驱动不会自行恢复：必须清空输入并重置事件队列，
+             * 否则后续字节持续被丢弃、错误事件刷屏 */
+            ESP_LOGW(TAG, "UART0 接收溢出（%s），清空缓冲重新切帧",
+                     evt.type == UART_FIFO_OVF ? "FIFO_OVF" : "BUFFER_FULL");
+            uart_flush_input(UART_PORT);
+            xQueueReset(s_uart_evt_queue);
+            continue;
+        }
         if (evt.type != UART_DATA)
             continue;
         uint16_t conn = ble_gap_conn_handle();
