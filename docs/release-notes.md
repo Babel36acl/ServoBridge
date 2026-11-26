@@ -51,10 +51,11 @@ ESP32-C6 的 BLE(NUS) ↔ UART0(RS485) 透传桥固件首个发版。给 Servo-A
 
 ## 已验证 / 未验证
 
-- 已验证：本机（Windows + ESP-IDF v6.1.1）`idf.py build` 通过；实机烧录、BLE 全链路
-  （扫描 → 连接 MTU=256 → CTRL 读回 `01 01 00 4B 00 00` → 在线改 9600 8N1 并回读 →
-  NUS 整帧写入不崩）通过。
-- 未验证：RS485 物理回包尚未闭环——`NUS → UART0 → TTL/485 模块 → 伺服驱动器 → 回包`
-  还没有对端设备实测，接上 485 模块后用 Servo-Assistant 蓝牙通道真连一次即可闭环。
+- 已验证：本机（Windows + ESP-IDF v6.1.1）`idf.py build` 通过；协议链路曾于 2026-11-20
+  在实机验证（扫描 → 连接 MTU=256 → CTRL 读回 `01 01 00 4B 00 00` → 在线改 9600 8N1
+  并回读 → NUS 整帧写入不崩）。本次发版是模块化重构与缺陷修复，协议与正常路径行为未变。
+- 未验证：重构后的固件尚未重新烧录实机复测；RS485 物理回包也未闭环——`NUS → UART0 →
+  TTL/485 模块 → 伺服驱动器 → 回包` 还没有对端设备实测，接上 485 模块后用
+  Servo-Assistant 蓝牙通道真连一次即可闭环。
 - 未验证：本 release 的 GitHub Actions 产物由 workflow 生成，维护者打 tag 后需确认
   Actions 日志与 release 资产。
