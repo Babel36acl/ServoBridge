@@ -1,6 +1,11 @@
 name: 固件构建
+
 on:
   push:
+    # GitHub 文档：Path filters are not evaluated for pushes of tags。
+    # 因此 v* 标签推送必定触发本 workflow（只走 release job），分支推送仍按 paths 过滤。
+    tags:
+      - "v*"
     paths:
       - "main/**"
       - "CMakeLists.txt"
@@ -8,19 +13,25 @@ on:
       - ".github/workflows/firmware.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    # 标签推送由 release job 自己构建并发布，避免同一提交编两遍
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ESP-IDF 编译（esp32c6）
-        uses: espressif/esp-idf-ci-action@v1
+        uses: espressif/esp-idf-ci-action@9d38657f3d789ca759b2b37aaf5ceffbc42c4f0d # v1（仓库的 v1 是分支，无同名 tag）
         with:
           esp_idf_version: v6.1.1
           target: esp32c6
           path: .
       - name: 上传固件
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: servobridge-firmware
           path: |
@@ -28,3 +39,44 @@ jobs:
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
           if-no-files-found: error
+
+  release:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 编译、生成合并镜像并改名
+        uses: espressif/esp-idf-ci-action@9d38657f3d789ca759b2b37aaf5ceffbc42c4f0d # v1（仓库的 v1 是分支，无同名 tag）
+        with:
+          esp_idf_version: v6.1.1
+          target: esp32c6
+          path: .
+          # 版本号取 tag 去掉 v；idf.py build 在容器内 configure 时读环境变量
+          command: |
+            export SERVOBRIDGE_VERSION=${{ github.ref_name }}
+            export SERVOBRIDGE_VERSION=${SERVOBRIDGE_VERSION#v}
+            idf.py build
+            cd build
+            ESPTOOL=$(command -v esptool.py || command -v esptool)
+            "$ESPTOOL" --chip esp32c6 merge_bin -o ServoBridge-merged.bin @flash_args
+            cp ServoBridge.bin ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-app.bin
+            cp bootloader/bootloader.bin ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-bootloader.bin
+            cp partition_table/partition-table.bin ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-partition-table.bin
+            mv ServoBridge-merged.bin ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-merged.bin
+            sed -e "s#0x0 bootloader/bootloader.bin#0x0 ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-bootloader.bin#" -e "s#0x8000 partition_table/partition-table.bin#0x8000 ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-partition-table.bin#" -e "s#0x10000 ServoBridge.bin#0x10000 ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-app.bin#" flash_args > ServoBridge-${SERVOBRIDGE_VERSION}-esp32c6-flash_args
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "build/ServoBridge-${V}-esp32c6-merged.bin" \
+            "build/ServoBridge-${V}-esp32c6-app.bin" \
+            "build/ServoBridge-${V}-esp32c6-bootloader.bin" \
+            "build/ServoBridge-${V}-esp32c6-partition-table.bin" \
+            "build/ServoBridge-${V}-esp32c6-flash_args" \
+            --title "ServoBridge ${GITHUB_REF_NAME}" \
+            --notes-file docs/release-notes.md

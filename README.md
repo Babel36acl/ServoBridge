@@ -32,8 +32,11 @@ console 已改走 USB Serial/JTAG（板上 Type-C），UART0 完全干净；复�
 | `…0003`（NUS TX） | UART0 整帧 → notify 回中央 |
 | `9F1D0001-6E4E-4B52-8A53-2A7F4F3E1001` | CTRL 服务 |
 | `9F1D0002-6E4E-4B52-8A53-2A7F4F3E1002` | CTRL 配置特性（read + write） |
+| `9F1D0003-6E4E-4B52-8A53-2A7F4F3E1003` | CTRL 固件版本（read only，UTF-8 字符串） |
 
 CTRL 特性是 6 字节：`[0]` 校验位（0 无 / 1 偶 / 2 奇），`[1]` 停止位（1/2），`[2..5]` 波特率小端 u32。写入即生效并落 NVS，掉电保持；非法值丢弃。出厂默认 19200 8E1。
+
+版本特性返回 `PROJECT_VER`：CI 发版时由 `SERVOBRIDGE_VERSION=<tag 去掉 v>` 注入，本机编译取 `git describe`；同一字符串也会在启动日志里打印。
 
 广播名 `ServoBridge`。
 
@@ -42,6 +45,19 @@ CTRL 特性是 6 字节：`[0]` 校验位（0 无 / 1 偶 / 2 奇），`[1]` 停
 - 中央端**必须把一个完整 Modbus 帧放进单个 BLE write**；本固件对下行整帧一次 `uart_write_bytes`，帧内零间隙。
 - 上行以 `uart_set_rx_timeout(4)` 的空闲事件切帧，整帧一次 notify；超过 ATT MTU-3 时连续分段，中央端按字节流重组。
 - 配置走 CTRL 带外通道，不污染 Modbus 字节流。
+
+## 代码结构（`main/`）
+
+| 文件 | 职责 |
+| --- | --- |
+| `main.c` | 只有 `app_main`，按启动顺序串联各模块 |
+| `bridge_cfg.c/.h` | 6 字节 CTRL 配置、合法性校验、NVS 持久化（namespace `bridge`，key `cfg`） |
+| `uart_bridge.c/.h` | UART0 初始化、在线改参数、`uart_task` 空闲切帧上行 |
+| `ble_gatt.c/.h` | NUS/CTRL 服务与各 access_cb、notify 分段（含只读版本特性） |
+| `ble_gap.c/.h` | 广播、连接/MTU 状态、NimBLE host task |
+| `fw_version.c/.h` | `PROJECT_VER` 版本字符串（启动日志与版本特性共用） |
+
+跨模块状态只走 getter：连接状态归 `ble_gap`，串口配置归 `bridge_cfg`。
 
 ## 烧录
 
@@ -68,5 +84,5 @@ Windows 本机（EIM v3 布局）`export.bat` 不能直接用，需要手工拼�
 
 ## 换件说明
 
-- **换手动方向 485 模块（DE/RE 引出）**：GPIO7 接 DE/RE，在 `init_uart()` 加 `uart_set_pin(UART_PORT, -1, -1, 7, -1)` 并 `uart_set_mode(UART_PORT, UART_MODE_RS485_HALF_DUPLEX)`，驱动自动切向并滤掉自己发的回环字节，其余不动（main.c 头注释里也有这段）。
-- **换芯片**：全部行为都在 `main/main.c` 一个文件里（约 400 行）：NimBLE NUS 外设 + UART0 事件循环 + 6 字节配置。换平台时按这三个块平移即可，协议本身（UUID、6 字节配置）保持不变，应用侧零改动。
+- **换手动方向 485 模块（DE/RE 引出）**：GPIO7 接 DE/RE，在 `uart_bridge.c` 的 `uart_bridge_init()` 里加 `uart_set_pin(UART_PORT, -1, -1, 7, -1)` 并 `uart_set_mode(UART_PORT, UART_MODE_RS485_HALF_DUPLEX)`，驱动自动切向并滤掉自己发的回环字节，其余不动（main.c 头注释里也有这段）。
+- **换芯片**：行为分布在 `main/` 的四个模块——`ble_gatt`（NimBLE 服务）、`ble_gap`（广播/连接）、`uart_bridge`（UART0 与切帧）、`bridge_cfg`（配置与 NVS），`main.c` 只是启动串联。换平台时按这四个块平移即可，协议本身（UUID、6 字节配置）保持不变，应用侧零改动。
