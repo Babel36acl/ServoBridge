@@ -79,8 +79,12 @@ static void uart_task(void *arg)
         if (evt.type != UART_DATA)
             continue;
         uint16_t conn = ble_gap_conn_handle();
-        if (conn == BLE_HS_CONN_HANDLE_NONE)
-            continue; /* 无连接时读走丢弃，防止 ring buffer 堵塞 */
+        if (conn == BLE_HS_CONN_HANDLE_NONE) {
+            /* 无连接也要真把 ring buffer 读空：只 continue 会攒满 2048 字节，
+             * 之后驱动持续报 BUFFER_FULL 丢新数据，重连后第一帧还混入陈年半帧 */
+            uart_read_bytes(UART_PORT, buf, evt.size, 0);
+            continue;
+        }
         int len = uart_read_bytes(UART_PORT, buf, evt.size, 0);
         if (len <= 0)
             continue;
