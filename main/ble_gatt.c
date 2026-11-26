@@ -11,6 +11,7 @@
 
 #include "ble_gap.h"
 #include "bridge_cfg.h"
+#include "fw_version.h"
 #include "uart_bridge.h"
 
 #define BLE_NAME SERVOBRIDGE_BLE_NAME
@@ -35,6 +36,9 @@ static const ble_uuid128_t CTRL_SVC_UUID =
 static const ble_uuid128_t CTRL_CHR_UUID =
     BLE_UUID128_INIT(0x02, 0x10, 0x3e, 0x4f, 0x7f, 0x2a, 0x53, 0x8a,
                      0x52, 0x4b, 0x4e, 0x6e, 0x02, 0x00, 0x1d, 0x9f);
+static const ble_uuid128_t CTRL_VER_UUID = /* 只读固件版本，UTF-8 字符串 */
+    BLE_UUID128_INIT(0x03, 0x10, 0x3e, 0x4f, 0x7f, 0x2a, 0x53, 0x8a,
+                     0x52, 0x4b, 0x4e, 0x6e, 0x03, 0x00, 0x1d, 0x9f);
 
 static uint16_t s_nus_rx_handle;
 static uint16_t s_nus_tx_handle;
@@ -65,6 +69,18 @@ static int nus_rx_access(uint16_t conn, uint16_t handle,
     if (uart_write_bytes(UART_NUM_0, buf, (size_t)len) != len)
         return BLE_ATT_ERR_INSUFFICIENT_RES;
     return 0;
+}
+
+/* 固件版本特性：只读，返回 PROJECT_VER 对应的 UTF-8 字符串（不含结尾 0） */
+static int fw_version_access(uint16_t conn, uint16_t handle,
+                             struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    (void)conn; (void)handle; (void)arg;
+    if (ctxt->op != BLE_GATT_ACCESS_OP_READ_CHR)
+        return BLE_ATT_ERR_READ_NOT_PERMITTED;
+    return os_mbuf_append(ctxt->om, fw_version_string(), (uint16_t)fw_version_length()) == 0
+               ? 0
+               : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
 static int ctrl_access(uint16_t conn, uint16_t handle,
@@ -114,6 +130,11 @@ static const struct ble_gatt_chr_def ctrl_chrs[] = {
         .uuid = &CTRL_CHR_UUID.u,
         .access_cb = ctrl_access,
         .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
+    },
+    {
+        .uuid = &CTRL_VER_UUID.u,
+        .access_cb = fw_version_access, /* 只读；6.x 要求非空 access_cb */
+        .flags = BLE_GATT_CHR_F_READ,
     },
     {0},
 };

@@ -6,4 +6,5 @@ idf_component_register(
         "uart_bridge.c"
         "ble_gatt.c"
         "ble_gap.c"
+        "fw_version.c"
     INCLUDE_DIRS ".")

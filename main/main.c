@@ -31,6 +31,7 @@
 #include "ble_gap.h"
 #include "ble_gatt.h"
 #include "bridge_cfg.h"
+#include "fw_version.h"
 #include "uart_bridge.h"
 
 static const char *TAG = "servobridge";
@@ -44,6 +45,7 @@ void app_main(void)
     }
 
     bridge_cfg_load();
+    ESP_LOGI(TAG, "ServoBridge 固件版本 %s", fw_version_string());
     uart_bridge_init();
     uart_bridge_apply_cfg();
 

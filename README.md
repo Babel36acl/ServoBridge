@@ -32,8 +32,11 @@ console 已改走 USB Serial/JTAG（板上 Type-C），UART0 完全干净；复�
 | `…0003`（NUS TX） | UART0 整帧 → notify 回中央 |
 | `9F1D0001-6E4E-4B52-8A53-2A7F4F3E1001` | CTRL 服务 |
 | `9F1D0002-6E4E-4B52-8A53-2A7F4F3E1002` | CTRL 配置特性（read + write） |
+| `9F1D0003-6E4E-4B52-8A53-2A7F4F3E1003` | CTRL 固件版本（read only，UTF-8 字符串） |
 
 CTRL 特性是 6 字节：`[0]` 校验位（0 无 / 1 偶 / 2 奇），`[1]` 停止位（1/2），`[2..5]` 波特率小端 u32。写入即生效并落 NVS，掉电保持；非法值丢弃。出厂默认 19200 8E1。
+
+版本特性返回 `PROJECT_VER`：CI 发版时由 `SERVOBRIDGE_VERSION=<tag 去掉 v>` 注入，本机编译取 `git describe`；同一字符串也会在启动日志里打印。
 
 广播名 `ServoBridge`。
 
